@@ -1,8 +1,8 @@
 import type jsPDF from 'jspdf';
-import nairaFontUrl from '@/assets/fonts/NotoSans-Regular.ttf';
+import nairaFontUrl from '@/assets/fonts/DejaVuSans.ttf';
 
-const FONT_FILE = 'NotoSans-Regular.ttf';
-const FONT_NAME = 'NotoSansNaira';
+const FONT_FILE = 'DejaVuSans.ttf';
+const FONT_NAME = 'DejaVuSansNaira';
 
 let cachedBase64: string | null = null;
 
@@ -17,10 +17,13 @@ async function arrayBufferToBase64(buffer: ArrayBuffer): Promise<string> {
 }
 
 /**
- * Registers a Unicode-capable font (with a real ₦ glyph) on the given jsPDF
- * document. jsPDF's built-in Helvetica/Times/Courier fonts are WinAnsi-only
- * and cannot render the Naira sign (U+20A6) — this embeds a font that can.
- * Returns the font name to pass to doc.setFont().
+ * Registers a Unicode-capable font (with a real ₦ glyph and a proper
+ * Windows-Unicode cmap table) on the given jsPDF document. jsPDF's
+ * built-in Helvetica/Times/Courier fonts are WinAnsi-only and cannot
+ * render the Naira sign (U+20A6); DejaVu Sans is a static TTF known to
+ * embed cleanly with jsPDF's own TrueType parser (variable fonts, such
+ * as the default Google Fonts download, often fail with
+ * "No unicode cmap for font"). Returns the font name for doc.setFont().
  */
 export async function ensureNairaFont(doc: jsPDF): Promise<string> {
   if (!cachedBase64) {
