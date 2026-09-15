@@ -11,7 +11,7 @@ import { useLocalStorage } from '@/lib/storage';
 import { setCurrency as setCurrencyState } from '@/lib/calc';
 import { blankInvoice, nextInvoiceNumber, newLineItem } from '@/lib/invoice';
 import { seedProducts, seedCustomers, defaultBranding, defaultPayment } from '@/lib/seed';
-import { downloadPdf } from '@/lib/pdf';
+import { downloadPdf, triggerDownload } from '@/lib/pdf';
 import { whatsappUrl } from '@/lib/whatsapp';
 import type { AppTab, Branding, Customer, FormatMode, InvoiceState, LineItem, PaymentInfo, Product } from '@/types';
 
