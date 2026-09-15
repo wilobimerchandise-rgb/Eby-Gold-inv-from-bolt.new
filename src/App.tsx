@@ -30,7 +30,6 @@ function App() {
 
   useEffect(() => { setCurrencyState(currency); }, [currency]);
 
-  // keep invoice.payment synced with saved payment info
   useEffect(() => {
     if (
       invoice.payment.bankName !== payment.bankName ||
@@ -42,7 +41,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payment]);
 
-  // first-run logo prompt
   useEffect(() => {
     if (!branding.logoDataUrl && !window.localStorage.getItem('eg_skipped_logo')) {
       setFirstRun(true);
@@ -96,7 +94,12 @@ function App() {
       const filename = `${invoice.invoiceNumber || 'invoice'}.pdf`;
       const file = new File([blob], filename, { type: 'application/pdf' });
 
-      // Prefer native share sheet (mobile) — can attach the file directly.
+      // Prefer the native share sheet — this is the ONLY way to attach the
+      // file directly to a WhatsApp message. WhatsApp's web/deep-link
+      // scheme (wa.me) has no attachment parameter; a website can never
+      // pre-attach a file to it. This path needs a real top-level browser
+      // tab (it won't work inside a sandboxed preview iframe) and a
+      // registered share target (WhatsApp app/desktop installed).
       const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
       if (nav.canShare && nav.canShare({ files: [file] })) {
         await navigator.share({
@@ -106,9 +109,12 @@ function App() {
         return;
       }
 
-      // Desktop fallback: download the PDF, then open WhatsApp Web with a message.
+      // Fallback: no way to attach the file automatically here, so download
+      // it and open WhatsApp with the message pre-filled, then tell the
+      // user they need to attach it themselves.
       triggerDownload(blob, filename);
-      setTimeout(() => window.open(whatsappUrl(invoice.customer, branding.brand), '_blank'), 400);
+      window.open(whatsappUrl(invoice.customer, branding.brand), '_blank');
+      alert(`"${filename}" was downloaded. Attach it to the WhatsApp chat that just opened — WhatsApp doesn't let a website attach a file automatically.`);
     } catch (e) {
       console.error('WhatsApp share failed', e);
       alert('Could not share to WhatsApp. The PDF was downloaded instead.');
@@ -134,7 +140,6 @@ function App() {
         onSettings={() => setSettingsOpen(true)}
       />
 
-      {/* first-run logo prompt */}
       {firstRun && (
         <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl">
@@ -198,7 +203,6 @@ function App() {
 
         {tab === 'invoice' && (
           <>
-            {/* mobile edit/preview toggle */}
             <div className="mb-3 flex gap-1 rounded-xl bg-stone-200 p-1 lg:hidden no-print">
               <button
                 type="button"
@@ -221,7 +225,6 @@ function App() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {/* editor */}
               <div className={`space-y-4 no-print ${showPreview ? 'hidden lg:block' : ''}`}>
                 <MetaPanel state={invoice} onPatch={patchInvoice} />
                 <CustomerPanel
@@ -238,7 +241,6 @@ function App() {
                 <TotalsPanel state={invoice} onPatch={patchInvoice} />
               </div>
 
-              {/* preview */}
               <div className={`${showPreview ? '' : 'hidden lg:block'}`}>
                 <div className="no-print mb-2 flex items-center justify-between">
                   <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500">
@@ -252,7 +254,6 @@ function App() {
               </div>
             </div>
 
-            {/* print-only */}
             <div className="hidden print:block">
               <PrintableDocument state={invoice} mode={mode} branding={branding} />
             </div>
