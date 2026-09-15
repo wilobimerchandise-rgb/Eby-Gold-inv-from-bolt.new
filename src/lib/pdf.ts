@@ -14,6 +14,27 @@ function money(n: number): string {
 const COL_X = [15, 27, 117, 135, 168, 195] as const;
 const COL_W = [12, 90, 18, 33, 27] as const;
 
+// ---- watermark tuning ----
+const WM_OPACITY = 0.045;   // lower = fainter. Try 0.03–0.07.
+const WM_TILE_SPACING = 55; // mm between tile centers — bigger = sparser
+const WM_TILE_SIZE = 32;    // mm — each logo instance's size
+const WM_ANGLE = 30;        // degrees, gives the diagonal "spread" look
+
+function drawWatermarkPattern(doc: jsPDF, logoDataUrl: string, pageW: number, pageH: number) {
+  try {
+    doc.saveGraphicsState();
+    doc.setGState(new doc.GState({ opacity: WM_OPACITY }));
+    for (let yy = -WM_TILE_SPACING; yy < pageH + WM_TILE_SPACING; yy += WM_TILE_SPACING) {
+      for (let xx = -WM_TILE_SPACING; xx < pageW + WM_TILE_SPACING; xx += WM_TILE_SPACING) {
+        try {
+          doc.addImage(logoDataUrl, 'PNG', xx, yy, WM_TILE_SIZE, WM_TILE_SIZE, undefined, 'FAST', WM_ANGLE);
+        } catch { /* skip a bad tile, keep going */ }
+      }
+    }
+    doc.restoreGraphicsState();
+  } catch { /* ignore bad image entirely */ }
+}
+
 export async function generatePdf(
   state: InvoiceState,
   branding: Branding,
@@ -21,13 +42,12 @@ export async function generatePdf(
 ): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210;
+  const H = 297;
   const M = 15;
   const CW = W - M * 2; // 180
 
   const NAIRA_FONT = await ensureNairaFont(doc);
 
-  // Prints a money string in the Naira-capable font, then restores whatever
-  // font/style was active beforehand so surrounding labels are unaffected.
   function printMoney(text: string, x: number, y: number, opts?: { align?: 'left' | 'center' | 'right' }) {
     const prev = doc.getFont();
     doc.setFont(NAIRA_FONT, 'normal');
@@ -35,16 +55,9 @@ export async function generatePdf(
     doc.setFont(prev.fontName, prev.fontStyle);
   }
 
-  // ---- watermark ----
+  // ---- watermark (spread across the page, drawn first so it sits behind everything) ----
   if (branding.logoDataUrl) {
-    try {
-      doc.saveGraphicsState();
-      doc.setGState(new doc.GState({ opacity: 0.1 }));
-      const wmW = 120;
-      const wmH = 120;
-      doc.addImage(branding.logoDataUrl, 'PNG', (W - wmW) / 2, (297 - wmH) / 2, wmW, wmH, undefined, 'FAST');
-      doc.restoreGraphicsState();
-    } catch { /* ignore bad image */ }
+    drawWatermarkPattern(doc, branding.logoDataUrl, W, H);
   }
 
   // ---- header ----
