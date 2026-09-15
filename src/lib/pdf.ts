@@ -2,12 +2,11 @@ import jsPDF from 'jspdf';
 import type { Branding, InvoiceState, Product } from '@/types';
 import { discountAmount, grandTotal, lineTotal, subtotal, taxAmount } from './calc';
 import { amountInWords } from './words';
+import { ensureNairaFont } from './fonts';
 
-// jsPDF's built-in Helvetica doesn't include ₦ (U+20A6).
-// NGN is the ISO 4217 code and is universally understood in Nigerian business.
 function money(n: number): string {
   const v = Number.isFinite(n) ? n : 0;
-  return 'NGN ' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '₦' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Column layout (M=15, W=210, CW=180):
@@ -15,15 +14,26 @@ function money(n: number): string {
 const COL_X = [15, 27, 117, 135, 168, 195] as const;
 const COL_W = [12, 90, 18, 33, 27] as const;
 
-export function generatePdf(
+export async function generatePdf(
   state: InvoiceState,
   branding: Branding,
   _products: Product[],
-): jsPDF {
+): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210;
   const M = 15;
   const CW = W - M * 2; // 180
+
+  const NAIRA_FONT = await ensureNairaFont(doc);
+
+  // Prints a money string in the Naira-capable font, then restores whatever
+  // font/style was active beforehand so surrounding labels are unaffected.
+  function printMoney(text: string, x: number, y: number, opts?: { align?: 'left' | 'center' | 'right' }) {
+    const prev = doc.getFont();
+    doc.setFont(NAIRA_FONT, 'normal');
+    doc.text(text, x, y, opts);
+    doc.setFont(prev.fontName, prev.fontStyle);
+  }
 
   // ---- watermark ----
   if (branding.logoDataUrl) {
@@ -105,7 +115,6 @@ export function generatePdf(
   // ---- items table ----
   const tableTop = y;
 
-  // header row
   doc.setFillColor(180, 120, 20);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
@@ -118,7 +127,6 @@ export function generatePdf(
   doc.text('Total',        COL_X[5] - 2,  y + 5.5, { align: 'right' });
   y += 8;
 
-  // body rows
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(50, 50, 50);
   if (state.items.length === 0) {
@@ -135,26 +143,22 @@ export function generatePdf(
     doc.text(String(idx + 1),              COL_X[0] + 2,  y + 5.5);
     const nameLines = doc.splitTextToSize(item.name || '—', COL_W[1] - 4);
     doc.text(nameLines[0] || '',           COL_X[1] + 2,  y + 5.5);
-    // right-align numbers to right edge of each column
     doc.text(String(item.quantity),        COL_X[3] - 2,  y + 5.5, { align: 'right' });
-    doc.text(money(item.price),            COL_X[4] - 2,  y + 5.5, { align: 'right' });
-    doc.text(money(lineTotal(item)),       COL_X[5] - 2,  y + 5.5, { align: 'right' });
+    printMoney(money(item.price),          COL_X[4] - 2,  y + 5.5, { align: 'right' });
+    printMoney(money(lineTotal(item)),     COL_X[5] - 2,  y + 5.5, { align: 'right' });
     y += rowH;
   });
 
   const tableBottom = y;
 
-  // table borders
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.2);
   doc.rect(M, tableTop, CW, tableBottom - tableTop);
-  // vertical dividers
   let acc = M;
   COL_W.forEach((w) => {
     acc += w;
     doc.line(acc, tableTop, acc, tableBottom);
   });
-  // horizontal row lines
   doc.line(M, tableTop + 8, W - M, tableTop + 8);
   for (let i = 1; i <= state.items.length; i++) {
     doc.line(M, tableTop + 8 + i * 8, W - M, tableTop + 8 + i * 8);
@@ -168,27 +172,26 @@ export function generatePdf(
   const tax = taxAmount(state);
   const total = grandTotal(state);
 
-  const tx = W - M - 80; // left edge of totals label column
+  const tx = W - M - 80;
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(90, 90, 90);
   doc.text('Subtotal', tx, y);
-  doc.text(money(sub), W - M, y, { align: 'right' });
+  printMoney(money(sub), W - M, y, { align: 'right' });
   y += 6;
   if (disc > 0) {
     doc.setTextColor(180, 120, 20);
     doc.text('Discount', tx, y);
-    doc.text('- ' + money(disc), W - M, y, { align: 'right' });
+    printMoney('- ' + money(disc), W - M, y, { align: 'right' });
     y += 6;
   }
   if (state.taxRate > 0) {
     doc.setTextColor(90, 90, 90);
     doc.text(`Tax (${state.taxRate}%)`, tx, y);
-    doc.text(money(tax), W - M, y, { align: 'right' });
+    printMoney(money(tax), W - M, y, { align: 'right' });
     y += 6;
   }
 
-  // grand total bar — wide enough for large NGN amounts
   const barW = 84;
   doc.setFillColor(180, 120, 20);
   doc.rect(tx - 4, y - 2, barW, 10, 'F');
@@ -196,7 +199,7 @@ export function generatePdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.text('Grand Total', tx, y + 4);
-  doc.text(money(total), W - M, y + 4, { align: 'right' });
+  printMoney(money(total), W - M, y + 4, { align: 'right' });
   y += 14;
 
   // amount in words
@@ -208,7 +211,7 @@ export function generatePdf(
   doc.text(wordsLines, M, y);
   y += wordsLines.length * 4 + 4;
 
-  // ---- payment information ----
+  // ---- payment information (bordered table) ----
   y += 4;
   doc.setDrawColor(200, 160, 60);
   doc.setLineWidth(0.4);
@@ -218,14 +221,41 @@ export function generatePdf(
   doc.setFontSize(8);
   doc.setTextColor(180, 120, 20);
   doc.text('PAYMENT INFORMATION', M, y);
-  y += 5;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(50, 50, 50);
+  y += 4;
+
   const pay = state.payment ?? { bankName: '', accountName: '', accountNumber: '' };
-  doc.text(`Bank: ${pay.bankName || ''}`, M, y);
-  doc.text(`Account Name: ${pay.accountName || ''}`, M, y + 5);
-  doc.text(`Account Number: ${pay.accountNumber || ''}`, M, y + 10);
+  const payRows: [string, string][] = [
+    ['Bank', pay.bankName || '—'],
+    ['Account Name', pay.accountName || '—'],
+    ['Account Number', pay.accountNumber || '—'],
+  ];
+  const payLabelW = 45;
+  const payRowH = 7;
+  const payTop = y;
+
+  payRows.forEach(([label, value], idx) => {
+    const ry = payTop + idx * payRowH;
+    if (idx % 2 === 0) {
+      doc.setFillColor(252, 247, 235);
+      doc.rect(M, ry, CW, payRowH, 'F');
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(90, 90, 90);
+    doc.text(label, M + 2, ry + 5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(40, 40, 40);
+    doc.text(value, M + payLabelW + 2, ry + 5);
+  });
+
+  const payBottom = payTop + payRows.length * payRowH;
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.2);
+  doc.rect(M, payTop, CW, payBottom - payTop);
+  doc.line(M + payLabelW, payTop, M + payLabelW, payBottom);
+  for (let i = 1; i < payRows.length; i++) {
+    doc.line(M, payTop + i * payRowH, W - M, payTop + i * payRowH);
+  }
 
   // ---- footer ----
   const fy = 285;
@@ -244,8 +274,8 @@ export function generatePdf(
   return doc;
 }
 
-export function downloadPdf(state: InvoiceState, branding: Branding, products: Product[]): Promise<Blob> {
-  const doc = generatePdf(state, branding, products);
+export async function downloadPdf(state: InvoiceState, branding: Branding, products: Product[]): Promise<Blob> {
+  const doc = await generatePdf(state, branding, products);
   return doc.output('blob');
 }
 
