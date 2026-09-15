@@ -29,7 +29,7 @@ export function generatePdf(
   if (branding.logoDataUrl) {
     try {
       doc.saveGraphicsState();
-      doc.setGState(doc.GState({ opacity: 0.1 }));
+      doc.setGState(new doc.GState({ opacity: 0.1 }));
       const wmW = 120;
       const wmH = 120;
       doc.addImage(branding.logoDataUrl, 'PNG', (W - wmW) / 2, (297 - wmH) / 2, wmW, wmH, undefined, 'FAST');
@@ -47,12 +47,12 @@ export function generatePdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
   doc.setTextColor(180, 120, 20);
-  doc.text(branding.brand, M + 22, y + 7);
+  doc.text(branding.brand || '—', M + 22, y + 7);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(90, 90, 90);
-  doc.text(branding.address, M + 22, y + 12);
-  doc.text(`Tel: ${branding.phone}  ·  ${branding.email}`, M + 22, y + 16.5);
+  doc.text(branding.address || '', M + 22, y + 12);
+  doc.text(`Tel: ${branding.phone || ''}  ·  ${branding.email || ''}`, M + 22, y + 16.5);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
@@ -61,8 +61,8 @@ export function generatePdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(60, 60, 60);
-  doc.text(`#${state.invoiceNumber}`, W - M, y + 13, { align: 'right' });
-  doc.text(`Date: ${state.date}`, W - M, y + 18, { align: 'right' });
+  doc.text(`#${state.invoiceNumber || ''}`, W - M, y + 13, { align: 'right' });
+  doc.text(`Date: ${state.date || ''}`, W - M, y + 18, { align: 'right' });
 
   y += 24;
   doc.setDrawColor(200, 160, 60);
@@ -78,12 +78,12 @@ export function generatePdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(40, 40, 40);
-  doc.text(state.customer.name || '—', M, y + 5);
+  doc.text(state.customer?.name || '—', M, y + 5);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(90, 90, 90);
-  doc.text(state.customer.phone || '', M, y + 10);
-  const addrLines = doc.splitTextToSize(state.customer.address || '', 80);
+  doc.text(state.customer?.phone || '', M, y + 10);
+  const addrLines = doc.splitTextToSize(state.customer?.address || '', 80);
   doc.text(addrLines, M, y + 15);
 
   doc.setFont('helvetica', 'bold');
@@ -93,11 +93,11 @@ export function generatePdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(40, 40, 40);
-  doc.text(state.paymentMethod, W - M, y + 5, { align: 'right' });
+  doc.text(state.paymentMethod || '—', W - M, y + 5, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(90, 90, 90);
-  doc.text(`Due: ${state.dueDate}`, W - M, y + 10, { align: 'right' });
+  doc.text(`Due: ${state.dueDate || ''}`, W - M, y + 10, { align: 'right' });
 
   y += Math.max(22, 8 + addrLines.length * 4);
   y += 4;
@@ -223,9 +223,9 @@ export function generatePdf(
   doc.setFontSize(9);
   doc.setTextColor(50, 50, 50);
   const pay = state.payment ?? { bankName: '', accountName: '', accountNumber: '' };
-  doc.text(`Bank: ${pay.bankName}`, M, y);
-  doc.text(`Account Name: ${pay.accountName}`, M, y + 5);
-  doc.text(`Account Number: ${pay.accountNumber}`, M, y + 10);
+  doc.text(`Bank: ${pay.bankName || ''}`, M, y);
+  doc.text(`Account Name: ${pay.accountName || ''}`, M, y + 5);
+  doc.text(`Account Number: ${pay.accountNumber || ''}`, M, y + 10);
 
   // ---- footer ----
   const fy = 285;
@@ -235,11 +235,11 @@ export function generatePdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(120, 80, 20);
-  doc.text(`Thank you for shopping with ${branding.brand}.`, W / 2, fy + 5, { align: 'center' });
+  doc.text(`Thank you for shopping with ${branding.brand || 'us'}.`, W / 2, fy + 5, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(120, 120, 120);
-  doc.text(`Created by: ${branding.userName}`, W / 2, fy + 10, { align: 'center' });
+  doc.text(`Created by: ${branding.userName || ''}`, W / 2, fy + 10, { align: 'center' });
 
   return doc;
 }
