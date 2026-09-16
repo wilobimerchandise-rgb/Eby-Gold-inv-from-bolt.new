@@ -6,8 +6,8 @@ export type Role = 'owner' | 'staff' | 'guest';
 // TEMPORARY: local-only password gate, not secure — visible in plain text
 // to anyone who inspects the built JS bundle. Replace with real Supabase
 // auth later. Change these two values to whatever you want for now.
-const OWNER_PASSWORD = 'eby-gold-owner';
-const STAFF_PASSWORD = 'eby-gold-staff';
+const OWNER_PASSWORD = 'eby-1234';
+const STAFF_PASSWORD = 'eby-staff';
 
 interface LoginScreenProps {
   onLogin: (role: Role) => void;
