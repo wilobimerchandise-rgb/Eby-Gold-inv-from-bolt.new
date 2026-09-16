@@ -15,10 +15,15 @@ const COL_X = [15, 27, 117, 135, 168, 195] as const;
 const COL_W = [12, 90, 18, 33, 27] as const;
 
 // ---- watermark tuning ----
-const WM_OPACITY = 0.045;   // lower = fainter. Try 0.03–0.07.
-const WM_TILE_SPACING = 55; // mm between tile centers — bigger = sparser
-const WM_TILE_SIZE = 32;    // mm — each logo instance's size
-const WM_ANGLE = 30;        // degrees, gives the diagonal "spread" look
+// NOTE: no rotation is applied — jsPDF v4's addImage rotation parameter
+// appears to behave differently from earlier versions and was silently
+// failing every tile. Straight grid for now; can revisit rotation later
+// once we confirm the base pattern renders.
+const WM_OPACITY = 0.14;    // lower = fainter. Once confirmed visible, try 0.05–0.10.
+const WM_TILE_SPACING = 50; // mm between tile centers — bigger = sparser
+const WM_TILE_SIZE = 30;    // mm — each logo instance's size
+
+let wmWarned = false;
 
 function drawWatermarkPattern(doc: jsPDF, logoDataUrl: string, pageW: number, pageH: number) {
   try {
@@ -27,12 +32,19 @@ function drawWatermarkPattern(doc: jsPDF, logoDataUrl: string, pageW: number, pa
     for (let yy = -WM_TILE_SPACING; yy < pageH + WM_TILE_SPACING; yy += WM_TILE_SPACING) {
       for (let xx = -WM_TILE_SPACING; xx < pageW + WM_TILE_SPACING; xx += WM_TILE_SPACING) {
         try {
-          doc.addImage(logoDataUrl, 'PNG', xx, yy, WM_TILE_SIZE, WM_TILE_SIZE, undefined, 'FAST', WM_ANGLE);
-        } catch { /* skip a bad tile, keep going */ }
+          doc.addImage(logoDataUrl, 'PNG', xx, yy, WM_TILE_SIZE, WM_TILE_SIZE, undefined, 'FAST');
+        } catch (err) {
+          if (!wmWarned) {
+            console.warn('Watermark tile failed to render:', err);
+            wmWarned = true;
+          }
+        }
       }
     }
     doc.restoreGraphicsState();
-  } catch { /* ignore bad image entirely */ }
+  } catch (err) {
+    console.warn('Watermark pattern failed entirely:', err);
+  }
 }
 
 export async function generatePdf(
