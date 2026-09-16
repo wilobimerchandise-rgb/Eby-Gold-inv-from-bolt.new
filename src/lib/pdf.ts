@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import type { Branding, InvoiceState, Product } from '@/types';
+import type { Branding, FormatMode, InvoiceState, Product } from '@/types';
 import { discountAmount, grandTotal, lineTotal, subtotal, taxAmount } from './calc';
 import { amountInWords } from './words';
 import { ensureNairaFont } from './fonts';
@@ -15,13 +15,9 @@ const COL_X = [15, 27, 117, 135, 168, 195] as const;
 const COL_W = [12, 90, 18, 33, 27] as const;
 
 // ---- watermark tuning ----
-// NOTE: no rotation is applied — jsPDF v4's addImage rotation parameter
-// appears to behave differently from earlier versions and was silently
-// failing every tile. Straight grid for now; can revisit rotation later
-// once we confirm the base pattern renders.
-const WM_OPACITY = 0.14;    // lower = fainter. Once confirmed visible, try 0.05–0.10.
-const WM_TILE_SPACING = 50; // mm between tile centers — bigger = sparser
-const WM_TILE_SIZE = 30;    // mm — each logo instance's size
+const WM_OPACITY = 0.14;
+const WM_TILE_SPACING = 50;
+const WM_TILE_SIZE = 30;
 
 let wmWarned = false;
 
@@ -47,16 +43,35 @@ function drawWatermarkPattern(doc: jsPDF, logoDataUrl: string, pageW: number, pa
   }
 }
 
+// Small "PAID" stamp drawn inside the top margin — a fixed strip that's
+// always empty regardless of how much content the document has, so it can
+// never collide with the header, table, or totals.
+function drawPaidStamp(doc: jsPDF, pageW: number) {
+  doc.setDrawColor(16, 130, 60);
+  doc.setTextColor(16, 130, 60);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setLineWidth(0.6);
+  const stampW = 30;
+  const stampH = 9;
+  const stampX = pageW - 8 - stampW;
+  const stampY = 4;
+  doc.roundedRect(stampX, stampY, stampW, stampH, 1.5, 1.5, 'S');
+  doc.text('PAID', stampX + stampW / 2, stampY + stampH / 2 + 3, { align: 'center' });
+}
+
 export async function generatePdf(
   state: InvoiceState,
   branding: Branding,
   _products: Product[],
+  mode: FormatMode,
 ): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210;
   const H = 297;
   const M = 15;
   const CW = W - M * 2; // 180
+  const docLabel = mode === 'receipt' ? 'RECEIPT' : 'INVOICE';
 
   const NAIRA_FONT = await ensureNairaFont(doc);
 
@@ -67,9 +82,13 @@ export async function generatePdf(
     doc.setFont(prev.fontName, prev.fontStyle);
   }
 
-  // ---- watermark (spread across the page, drawn first so it sits behind everything) ----
+  // ---- watermark ----
   if (branding.logoDataUrl) {
     drawWatermarkPattern(doc, branding.logoDataUrl, W, H);
+  }
+
+  if (state.paid) {
+    drawPaidStamp(doc, W);
   }
 
   // ---- header ----
@@ -92,7 +111,7 @@ export async function generatePdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
   doc.setTextColor(180, 120, 20);
-  doc.text('INVOICE', W - M, y + 7, { align: 'right' });
+  doc.text(docLabel, W - M, y + 7, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(60, 60, 60);
@@ -299,8 +318,13 @@ export async function generatePdf(
   return doc;
 }
 
-export async function downloadPdf(state: InvoiceState, branding: Branding, products: Product[]): Promise<Blob> {
-  const doc = await generatePdf(state, branding, products);
+export async function downloadPdf(
+  state: InvoiceState,
+  branding: Branding,
+  products: Product[],
+  mode: FormatMode,
+): Promise<Blob> {
+  const doc = await generatePdf(state, branding, products, mode);
   return doc.output('blob');
 }
 
