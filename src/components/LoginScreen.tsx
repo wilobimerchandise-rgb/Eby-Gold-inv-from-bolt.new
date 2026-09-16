@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import logoUrl from '@/assets/branding/LOGO.jpeg';
 
 export type Role = 'owner' | 'staff' | 'guest';
 
@@ -31,8 +32,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   return (
     <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
-          <span className="text-2xl font-black text-orange-600">EG</span>
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-orange-100">
+          <img src={logoUrl} alt="Eby-Gold Superstores logo" className="h-full w-full object-contain" />
         </div>
         <h1 className="text-center text-lg font-bold text-stone-800">Eby-Gold Superstores</h1>
         <p className="mt-1 text-center text-sm text-stone-500">Sign in to continue</p>
