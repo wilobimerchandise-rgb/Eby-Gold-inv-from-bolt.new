@@ -7,6 +7,7 @@ import { MetaPanel } from '@/components/MetaPanel';
 import { PrintableDocument } from '@/components/PrintableDocument';
 import { InventoryTab } from '@/components/InventoryTab';
 import { SettingsModal } from '@/components/SettingsModal';
+import { LoginScreen, type Role } from '@/components/LoginScreen';
 import { useLocalStorage } from '@/lib/storage';
 import { setCurrency as setCurrencyState } from '@/lib/calc';
 import { blankInvoice, nextInvoiceNumber, newLineItem } from '@/lib/invoice';
@@ -16,6 +17,7 @@ import { whatsappUrl } from '@/lib/whatsapp';
 import type { AppTab, Branding, Customer, FormatMode, InvoiceState, LineItem, PaymentInfo, Product } from '@/types';
 
 function App() {
+  const [role, setRole] = useLocalStorage<Role | null>('eg_role', null);
   const [products, setProducts] = useLocalStorage<Product[]>('eg_products', seedProducts);
   const [customers, setCustomers] = useLocalStorage<Customer[]>('eg_customers', seedCustomers);
   const [invoice, setInvoice] = useLocalStorage<InvoiceState>('eg_invoice', blankInvoice('EGS-2026-0001'));
@@ -27,6 +29,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [firstRun, setFirstRun] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+
+  const isGuest = role === 'guest';
 
   useEffect(() => { setCurrencyState(currency); }, [currency]);
 
@@ -41,11 +45,12 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payment]);
 
+  // first-run logo prompt — skip entirely for guests, who can't act on it anyway
   useEffect(() => {
-    if (!branding.logoDataUrl && !window.localStorage.getItem('eg_skipped_logo')) {
+    if (role !== 'guest' && !branding.logoDataUrl && !window.localStorage.getItem('eg_skipped_logo')) {
       setFirstRun(true);
     }
-  }, [branding.logoDataUrl]);
+  }, [branding.logoDataUrl, role]);
 
   function patchInvoice(patch: Partial<InvoiceState>) {
     setInvoice({ ...invoice, ...patch });
@@ -71,6 +76,10 @@ function App() {
       items: [newLineItem()],
       payment,
     });
+  }
+
+  function handleGuestBlocked() {
+    alert('Guests have view-only access. Log in as Owner or Staff to make changes.');
   }
 
   function handlePrint() {
@@ -101,12 +110,6 @@ function App() {
     const filename = `${invoice.invoiceNumber || 'invoice'}.pdf`;
     const file = new File([blob], filename, { type: 'application/pdf' });
 
-    // Prefer the native share sheet — this is the ONLY way to attach the
-    // file directly to a WhatsApp message. WhatsApp's web/deep-link scheme
-    // (wa.me) has no attachment parameter; a website can never pre-attach a
-    // file to it. This path needs a real top-level browser tab (it won't
-    // work inside a sandboxed preview iframe) and a registered share target
-    // (WhatsApp app/desktop installed).
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
     if (nav.canShare && nav.canShare({ files: [file] })) {
       try {
@@ -116,18 +119,13 @@ function App() {
         });
         return;
       } catch (e) {
-        // AbortError means the user closed the native share sheet themselves —
-        // that's a cancellation, not a failure, so don't alarm them with an error.
         if (e instanceof Error && e.name === 'AbortError') {
           return;
         }
         console.error('WhatsApp share failed', e);
-        // fall through to the manual fallback below
       }
     }
 
-    // Fallback: no way to attach the file automatically here, so download it
-    // and open WhatsApp with the message pre-filled; the user attaches it themselves.
     triggerDownload(blob, filename);
     window.open(whatsappUrl(invoice.customer, branding.brand), '_blank');
     alert(`"${filename}" was downloaded. Attach it to the WhatsApp chat that just opened — WhatsApp doesn't let a website attach a file automatically.`);
@@ -138,8 +136,26 @@ function App() {
     setFirstRun(false);
   }
 
+  if (!role) {
+    return <LoginScreen onLogin={setRole} />;
+  }
+
   return (
     <div className="app-bg min-h-screen bg-stone-100 text-stone-800">
+      <div className="no-print flex items-center justify-end gap-2 bg-stone-800 px-3 py-1 text-xs text-stone-200">
+        <span>
+          Signed in as <span className="font-semibold capitalize">{role}</span>
+          {isGuest && ' (view only)'}
+        </span>
+        <button
+          type="button"
+          onClick={() => setRole(null)}
+          className="rounded bg-stone-700 px-2 py-0.5 font-semibold hover:bg-stone-600"
+        >
+          Log out
+        </button>
+      </div>
+
       <Toolbar
         tab={tab}
         mode={mode}
@@ -148,7 +164,7 @@ function App() {
         onPrint={handlePrint}
         onPdf={handlePdf}
         onWhatsapp={handleWhatsapp}
-        onClear={handleClear}
+        onClear={isGuest ? handleGuestBlocked : handleClear}
         onSettings={() => setSettingsOpen(true)}
       />
 
@@ -183,18 +199,22 @@ function App() {
       )}
 
       {settingsOpen && (
-        <SettingsModal
-          branding={branding}
-          payment={payment}
-          onBranding={setBranding}
-          onPayment={setPayment}
-          onClose={() => setSettingsOpen(false)}
-        />
+        <fieldset disabled={isGuest} className="contents">
+          <SettingsModal
+            branding={branding}
+            payment={payment}
+            onBranding={setBranding}
+            onPayment={setPayment}
+            onClose={() => setSettingsOpen(false)}
+          />
+        </fieldset>
       )}
 
       <div className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
         {tab === 'inventory' && (
-          <InventoryTab products={products} onChange={setProducts} />
+          <fieldset disabled={isGuest} className="min-w-0 border-0 m-0 p-0">
+            <InventoryTab products={products} onChange={setProducts} />
+          </fieldset>
         )}
 
         {tab === 'settings' && (
@@ -238,19 +258,27 @@ function App() {
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className={`space-y-4 no-print ${showPreview ? 'hidden lg:block' : ''}`}>
-                <MetaPanel state={invoice} onPatch={patchInvoice} />
-                <CustomerPanel
-                  customers={customers}
-                  selected={invoice.customer}
-                  onSelect={handleSelectCustomer}
-                  onSaveNew={handleSaveNewCustomer}
-                />
-                <LineItemEditor
-                  items={invoice.items}
-                  products={products}
-                  onChange={handleItemsChange}
-                />
-                <TotalsPanel state={invoice} onPatch={patchInvoice} />
+                <fieldset disabled={isGuest} className="min-w-0 border-0 m-0 p-0">
+                  <MetaPanel state={invoice} onPatch={patchInvoice} />
+                </fieldset>
+                <fieldset disabled={isGuest} className="min-w-0 border-0 m-0 p-0">
+                  <CustomerPanel
+                    customers={customers}
+                    selected={invoice.customer}
+                    onSelect={handleSelectCustomer}
+                    onSaveNew={handleSaveNewCustomer}
+                  />
+                </fieldset>
+                <fieldset disabled={isGuest} className="min-w-0 border-0 m-0 p-0">
+                  <LineItemEditor
+                    items={invoice.items}
+                    products={products}
+                    onChange={handleItemsChange}
+                  />
+                </fieldset>
+                <fieldset disabled={isGuest} className="min-w-0 border-0 m-0 p-0">
+                  <TotalsPanel state={invoice} onPatch={patchInvoice} />
+                </fieldset>
               </div>
 
               <div className={`${showPreview ? '' : 'hidden lg:block'}`}>
