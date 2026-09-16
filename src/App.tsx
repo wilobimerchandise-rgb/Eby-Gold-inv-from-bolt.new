@@ -20,7 +20,7 @@ function App() {
   const [role, setRole] = useLocalStorage<Role | null>('eg_role', null);
   const [products, setProducts] = useLocalStorage<Product[]>('eg_products', seedProducts);
   const [customers, setCustomers] = useLocalStorage<Customer[]>('eg_customers', seedCustomers);
-  const [invoice, setInvoice] = useLocalStorage<InvoiceState>('eg_invoice', blankInvoice('EGS-2026-0001'));
+  const [invoice, setInvoice] = useLocalStorage<InvoiceState>('eg_invoice', blankInvoice('EGS-INV-2026-0001'));
   const [mode, setMode] = useLocalStorage<FormatMode>('eg_mode', 'invoice');
   const [currency, setCurrency] = useLocalStorage<string>('eg_currency', '₦');
   const [branding, setBranding] = useLocalStorage<Branding>('eg_branding', defaultBranding);
@@ -45,7 +45,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payment]);
 
-  // first-run logo prompt — skip entirely for guests, who can't act on it anyway
   useEffect(() => {
     if (role !== 'guest' && !branding.logoDataUrl && !window.localStorage.getItem('eg_skipped_logo')) {
       setFirstRun(true);
@@ -70,12 +69,27 @@ function App() {
 
   function handleClear() {
     if (!window.confirm('Clear the current document? This starts a fresh invoice but keeps your saved customers and products.')) return;
+    setMode('invoice');
     setInvoice({
-      ...blankInvoice(nextInvoiceNumber(invoice.invoiceNumber)),
+      ...blankInvoice(nextInvoiceNumber(invoice.invoiceNumber, 'invoice')),
       customer: customers[0] ?? { id: '', name: '', phone: '', address: '' },
       items: [newLineItem()],
       payment,
     });
+  }
+
+  function handleMarkPaid() {
+    if (invoice.paid) return;
+    if (!window.confirm('Mark this document as paid? This generates a new receipt number and switches the layout to Receipt.')) return;
+    const receiptNumber = nextInvoiceNumber(invoice.invoiceNumber, 'receipt');
+    setInvoice({
+      ...invoice,
+      invoiceNumber: receiptNumber,
+      sourceInvoiceNumber: invoice.invoiceNumber,
+      paid: true,
+      paidDate: new Date().toISOString().slice(0, 10),
+    });
+    setMode('receipt');
   }
 
   function handleGuestBlocked() {
@@ -89,7 +103,7 @@ function App() {
 
   async function handlePdf() {
     try {
-      const blob = await downloadPdf(invoice, branding, products);
+      const blob = await downloadPdf(invoice, branding, products, mode);
       triggerDownload(blob, `${invoice.invoiceNumber || 'invoice'}.pdf`);
     } catch (e) {
       console.error('PDF generation failed', e);
@@ -100,7 +114,7 @@ function App() {
   async function handleWhatsapp() {
     let blob: Blob;
     try {
-      blob = await downloadPdf(invoice, branding, products);
+      blob = await downloadPdf(invoice, branding, products, mode);
     } catch (e) {
       console.error('PDF generation failed', e);
       alert('Sorry, the invoice could not be generated. Please try again.');
@@ -258,6 +272,36 @@ function App() {
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className={`space-y-4 no-print ${showPreview ? 'hidden lg:block' : ''}`}>
+                <fieldset disabled={isGuest} className="min-w-0 border-0 m-0 p-0">
+                  <div className="rounded-2xl border border-stone-200 bg-white p-3">
+                    {invoice.paid ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
+                          PAID on {invoice.paidDate}
+                        </span>
+                        {invoice.sourceInvoiceNumber && (
+                          <span className="text-[11px] text-stone-400">
+                            From {invoice.sourceInvoiceNumber}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
+                          UNPAID
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleMarkPaid}
+                          className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-green-700"
+                        >
+                          Mark as Paid & Generate Receipt
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </fieldset>
+
                 <fieldset disabled={isGuest} className="min-w-0 border-0 m-0 p-0">
                   <MetaPanel state={invoice} onPatch={patchInvoice} />
                 </fieldset>
