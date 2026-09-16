@@ -42,7 +42,7 @@ export function InventoryTab({ products, onChange }: Props) {
       unit: 'pc',
       stock: 0,
     };
-    onChange([...products, np]);
+    onChange([np, ...products]);
   }
 
   return (
