@@ -89,36 +89,48 @@ function App() {
   }
 
   async function handleWhatsapp() {
+    let blob: Blob;
     try {
-      const blob = await downloadPdf(invoice, branding, products);
-      const filename = `${invoice.invoiceNumber || 'invoice'}.pdf`;
-      const file = new File([blob], filename, { type: 'application/pdf' });
+      blob = await downloadPdf(invoice, branding, products);
+    } catch (e) {
+      console.error('PDF generation failed', e);
+      alert('Sorry, the invoice could not be generated. Please try again.');
+      return;
+    }
 
-      // Prefer the native share sheet — this is the ONLY way to attach the
-      // file directly to a WhatsApp message. WhatsApp's web/deep-link
-      // scheme (wa.me) has no attachment parameter; a website can never
-      // pre-attach a file to it. This path needs a real top-level browser
-      // tab (it won't work inside a sandboxed preview iframe) and a
-      // registered share target (WhatsApp app/desktop installed).
-      const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-      if (nav.canShare && nav.canShare({ files: [file] })) {
+    const filename = `${invoice.invoiceNumber || 'invoice'}.pdf`;
+    const file = new File([blob], filename, { type: 'application/pdf' });
+
+    // Prefer the native share sheet — this is the ONLY way to attach the
+    // file directly to a WhatsApp message. WhatsApp's web/deep-link scheme
+    // (wa.me) has no attachment parameter; a website can never pre-attach a
+    // file to it. This path needs a real top-level browser tab (it won't
+    // work inside a sandboxed preview iframe) and a registered share target
+    // (WhatsApp app/desktop installed).
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    if (nav.canShare && nav.canShare({ files: [file] })) {
+      try {
         await navigator.share({
           text: `Hello ${invoice.customer.name || 'Customer'}, please find your invoice from ${branding.brand} attached.`,
           files: [file],
         });
         return;
+      } catch (e) {
+        // AbortError means the user closed the native share sheet themselves —
+        // that's a cancellation, not a failure, so don't alarm them with an error.
+        if (e instanceof Error && e.name === 'AbortError') {
+          return;
+        }
+        console.error('WhatsApp share failed', e);
+        // fall through to the manual fallback below
       }
-
-      // Fallback: no way to attach the file automatically here, so download
-      // it and open WhatsApp with the message pre-filled, then tell the
-      // user they need to attach it themselves.
-      triggerDownload(blob, filename);
-      window.open(whatsappUrl(invoice.customer, branding.brand), '_blank');
-      alert(`"${filename}" was downloaded. Attach it to the WhatsApp chat that just opened — WhatsApp doesn't let a website attach a file automatically.`);
-    } catch (e) {
-      console.error('WhatsApp share failed', e);
-      alert('Could not share to WhatsApp. The PDF was downloaded instead.');
     }
+
+    // Fallback: no way to attach the file automatically here, so download it
+    // and open WhatsApp with the message pre-filled; the user attaches it themselves.
+    triggerDownload(blob, filename);
+    window.open(whatsappUrl(invoice.customer, branding.brand), '_blank');
+    alert(`"${filename}" was downloaded. Attach it to the WhatsApp chat that just opened — WhatsApp doesn't let a website attach a file automatically.`);
   }
 
   function skipLogo() {
