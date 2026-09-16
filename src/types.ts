@@ -56,6 +56,9 @@ export interface InvoiceState {
   paymentMethod: string;
   notes: string;
   payment: PaymentInfo;
+  paid: boolean;
+  paidDate: string | null;
+  sourceInvoiceNumber: string | null;
 }
 
 export type FormatMode = 'invoice' | 'receipt';
