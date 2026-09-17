@@ -97,11 +97,13 @@ function App() {
   }
 
   function handlePrint() {
+    if (isGuest) { handleGuestBlocked(); return; }
     setShowPreview(false);
     setTimeout(() => window.print(), 60);
   }
 
   async function handlePdf() {
+    if (isGuest) { handleGuestBlocked(); return; }
     try {
       const blob = await downloadPdf(invoice, branding, products, mode);
       triggerDownload(blob, `${invoice.invoiceNumber || 'invoice'}.pdf`);
@@ -112,6 +114,7 @@ function App() {
   }
 
   async function handleWhatsapp() {
+    if (isGuest) { handleGuestBlocked(); return; }
     let blob: Blob;
     try {
       blob = await downloadPdf(invoice, branding, products, mode);
@@ -123,12 +126,14 @@ function App() {
 
     const filename = `${invoice.invoiceNumber || 'invoice'}.pdf`;
     const file = new File([blob], filename, { type: 'application/pdf' });
+    const docWord = mode === 'receipt' ? 'receipt' : 'invoice';
+    const shareText = `Hello ${invoice.customer.name || 'Customer'}, please find your ${docWord} from ${branding.brand} attached.`;
 
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
     if (nav.canShare && nav.canShare({ files: [file] })) {
       try {
         await navigator.share({
-          text: `Hello ${invoice.customer.name || 'Customer'}, please find your invoice from ${branding.brand} attached.`,
+          text: shareText,
           files: [file],
         });
         return;
