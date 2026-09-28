@@ -46,6 +46,7 @@ function drawWatermarkPattern(doc: jsPDF, logoDataUrl: string, pageW: number, pa
 // Small "PAID" stamp drawn inside the top margin — a fixed strip that's
 // always empty regardless of how much content the document has, so it can
 // never collide with the header, table, or totals.
+// NOTE: only used for receipts. Invoices never show this stamp.
 function drawPaidStamp(doc: jsPDF, pageW: number) {
   doc.setDrawColor(16, 130, 60);
   doc.setTextColor(16, 130, 60);
@@ -87,7 +88,8 @@ export async function generatePdf(
     drawWatermarkPattern(doc, branding.logoDataUrl, W, H);
   }
 
-  if (state.paid) {
+  // PAID stamp: receipts only. Invoices never display it.
+  if (mode === 'receipt' && state.paid) {
     drawPaidStamp(doc, W);
   }
 
@@ -136,9 +138,14 @@ export async function generatePdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(90, 90, 90);
-  doc.text(state.customer?.phone || '', M, y + 10);
+  // Hide the phone line when it's empty or just a placeholder dash.
+  const custPhone = (state.customer?.phone || '').trim();
+  const hasPhone = custPhone !== '' && custPhone !== '-' && custPhone !== '—';
+  if (hasPhone) {
+    doc.text(custPhone, M, y + 10);
+  }
   const addrLines = doc.splitTextToSize(state.customer?.address || '', 80);
-  doc.text(addrLines, M, y + 15);
+  doc.text(addrLines, M, y + (hasPhone ? 15 : 10));
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
@@ -151,7 +158,10 @@ export async function generatePdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(90, 90, 90);
-  doc.text(`Due: ${state.dueDate || ''}`, W - M, y + 10, { align: 'right' });
+  // Only show the due date line when there is a due date.
+  if (state.dueDate) {
+    doc.text(`Due: ${state.dueDate}`, W - M, y + 10, { align: 'right' });
+  }
 
   y += Math.max(22, 8 + addrLines.length * 4);
   y += 4;
